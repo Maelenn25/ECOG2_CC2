@@ -1,0 +1,168 @@
+---
+title: "R Notebook"
+output: 
+  github_document:
+    toc: true
+    toc_depth: 2
+---
+
+```{r}
+library (phyloseq)
+library(ggplot2)
+library (dada2)
+library(Biostrings)
+theme_set(theme_bw())
+```
+
+```{bash}
+wget https://pagesperso.univ-brest.fr/~maignien/teaching/M1-MFA/UE-Ecogenomique2/EcoG2_data_cc2.tar.gz
+tar xvzf EcoG2_data_cc2.tar.gz
+```
+
+#création variable
+```{r}
+path <- "~/ECOG2_CC2/sequences_reunies" # CHANGE ME to the directory containing the fastq files after unzipping.
+list.files(path)
+```
+## filtration et retirage des sequences basse qualité
+```{r}
+# Sort ensures forward/reverse reads are in same order
+fnFs <- sort(list.files(path, pattern="_R1.fastq"))
+fnRs <- sort(list.files(path, pattern="_R2.fastq"))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "R"), `[`,1)
+# Specify the full path to the fnFs and fnRs
+fnFs <- file.path(path, fnFs)
+fnRs <- file.path(path, fnRs)
+print(fnRs)
+```
+
+```{r}
+fnRs[1:11]
+```
+
+```{r}
+plotQualityProfile(fnFs[1:3])
+```
+
+
+```{r}
+plotQualityProfile(fnRs[1:2])
+```
+
+```{r}
+# Place filtered files in filtered/ subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+sample.names
+print(filtFs)
+```
+
+```{r}
+out<-filterAndTrim(fnFs, filtFs, fnRs, filtRs, truncLen=c(210,200),trimLeft=c(21),
+              maxN=0, maxEE=c(2,2), truncQ=2, rm.phix=TRUE,
+              compress=TRUE, multithread=TRUE) # On Windows set multithread=FALSE
+```
+
+```{r}
+head(out)
+```
+# Learn the Error Rates
+ Nous allons ici utiliser des lignes de commandes qui vont permettre d'apprendre à la machine les différents profils d'erreurs générées lors du séquençage. L'opération est faite sur les deux types de séquence.
+ 
+```{r}
+errF <- learnErrors(filtFs, multithread=TRUE)
+```
+
+```{r}
+errR <- learnErrors(filtRs, multithread=TRUE)
+```
+Chaque transition (mutation) possible (A→C, A→G, ...) le taux d'erreur sont indiqués. 
+-points : les taux d'erreur observés pour chaque score de qualité du consensus. 
+-ligne noire : taux d'erreur estimés après convergence de l'algorithme d'apprentissage machine. 
+-ligne rouge : taux d'erreur attendus selon la définition nominale du Q-score.
+```{r}
+plotErrors(errF, nominalQ=TRUE)
+```
+```{r}
+plotErrors(errR, nominalQ=TRUE)
+```
+# Sample Inference
+Ici nous créons une autre variable "dadaFs" dans laquelle nous mettons les fichiers obtenus après avoir filtré et appliqué le profil d'erreur à nos séquences. Nous allons faire la même chose avec dadaRS.
+
+```{r}
+dadaFs <- dada(filtFs, err=errF, multithread=TRUE)
+```
+```{r}
+dadaRs <- dada(filtRs, err=errR, multithread=TRUE)
+```
+Cette commande nous permet de visualiser le résultat global qu'on retrouve classé dans la liste dadaFs. Ils nous indiquent que sur les séquences on retrouve 128 séquences qui correspondent aux vrais variants, par rapport aux 1979 séquences. Ils nous indiquent aussi les diagnostiques de qualité.
+```{r}
+dadaFs[[1]]
+```
+# Merge paired reads
+Ici nous voulons mettre en une seule séquence les Forwards et les Reverses.Nous pouvons faire cette opération grâce aux overlaps de 12 paires de base. Cela se fait grâce à un alignement entre les forwards et les reverses qui vont permettre de contruire les contigs.
+```{r}
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose=TRUE)
+# Inspect the merger data.frame from the first sample
+head(mergers[[1]])
+```
+# Construct sequence table
+Nous allons construire une table des variations de séquence dans les amplicons (ASV) qui permet une meilleure résolution que les tables OTUs 97%
+```{r}
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+```
+```{r}
+# Inspect distribution of sequence lengths
+table(nchar(getSequences(seqtab)))
+```
+# Remove chimeras
+Malgré qu'on ait pu appliquer les modèles d'erreurs aux séquences, il reste des chimères. Ces chimères sont facilement reconnaissables par la machine et peuvent etre réparées en y rajoutant les parties droites et gauche des 2 séquences les plus abondantes.
+```{r}
+seqtab.nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=TRUE, verbose=TRUE)
+dim(seqtab.nochim)
+```
+Ici on peut voir qu'on à 0 chimère dans notre jeu de donnée.
+```{r}
+1-sum(seqtab.nochim)/sum(seqtab)
+```
+# Track reads through the pipeline
+Ce code nous permet de visualiser le nombre de séquences obtenues à la suite de toutes nos manipulations de filtrage. Ici nous pouvons voir qu'on a pu récupérer la plupart de nos séquences brutes, ce qui est signe d'une bonne qualité de séquençage.
+```{r}
+getN <- function(x) sum(getUniques(x))
+track <- cbind(out, sapply(dadaFs, getN), sapply(dadaRs, getN), sapply(mergers, getN), rowSums(seqtab.nochim))
+# If processing a single sample, remove the sapply calls: e.g. replace sapply(dadaFs, getN) with getN(dadaFs)
+colnames(track) <- c("input", "filtered", "denoisedF", "denoisedR", "merged", "nonchim")
+rownames(track) <- sample.names
+head(track)
+```
+# Assign taxonomy
+Ici nous avons du récupérer silva afin d'analyser et d'assigner les taxonomies.
+```{bash}
+wget https://zenodo.org/record/3986799/files/silva_species_assignment_v138.fa.gz
+```
+Ici nous créons une variable qui va recevoir les espèces obtenues grâce à Silva
+
+```{r}
+taxa <- assignTaxonomy(seqtab.nochim, "~/silva_nr99_v138_train_set.fa.gz", multithread=TRUE)
+```
+
+```{r}
+taxa <- addSpecies(taxa, "~/silva_species_assignment_v138.fa.gz")
+```
+On remarque donc après avoir affiché la table qu'on a créée on obtient une majorité de  Bacteroidetes ce qui est normal dans des échantillons fécaux. D'autres espèces n'ont pas pu être assignées car on a peu de données sur les bactéries des intestins des souris. 
+```{r}
+taxa.print <- taxa # Removing sequence rownames for display only
+rownames(taxa.print) <- NULL
+head(taxa.print)
+```
+
+# Taxonomic Filtering
+ Ces lignes de codes nous permettent de compter le nombre d'echantillons qu'on a pour chaque phylums.
+```{r}
+# Show available ranks in the dataset
+rank_names(taxa)
+```
