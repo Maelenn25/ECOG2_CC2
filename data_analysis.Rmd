@@ -45,7 +45,6 @@ fnRs[1:11]
 plotQualityProfile(fnFs[1:3])
 ```
 
-
 ```{r}
 plotQualityProfile(fnRs[1:2])
 ```
