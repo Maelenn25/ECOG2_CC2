@@ -60,7 +60,7 @@ print(filtFs)
 ```
 
 ```{r}
-out<-filterAndTrim(fnFs, filtFs, fnRs, filtRs, truncLen=c(210,200),trimLeft=c(21),
+out<-filterAndTrim(fnFs, filtFs, fnRs, filtRs, truncLen=c(240,200),trimLeft=c(21),
               maxN=0, maxEE=c(2,2), truncQ=2, rm.phix=TRUE,
               compress=TRUE, multithread=TRUE) # On Windows set multithread=FALSE
 ```
@@ -85,6 +85,7 @@ Chaque transition (mutation) possible (A→C, A→G, ...) le taux d'erreur sont 
 ```{r}
 plotErrors(errF, nominalQ=TRUE)
 ```
+
 ```{r}
 plotErrors(errR, nominalQ=TRUE)
 ```
@@ -94,6 +95,7 @@ Ici nous créons une autre variable "dadaFs" dans laquelle nous mettons les fich
 ```{r}
 dadaFs <- dada(filtFs, err=errF, multithread=TRUE)
 ```
+
 ```{r}
 dadaRs <- dada(filtRs, err=errR, multithread=TRUE)
 ```
@@ -114,6 +116,7 @@ Nous allons construire une table des variations de séquence dans les amplicons 
 seqtab <- makeSequenceTable(mergers)
 dim(seqtab)
 ```
+
 ```{r}
 # Inspect distribution of sequence lengths
 table(nchar(getSequences(seqtab)))
@@ -124,7 +127,7 @@ Malgré qu'on ait pu appliquer les modèles d'erreurs aux séquences, il reste d
 seqtab.nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=TRUE, verbose=TRUE)
 dim(seqtab.nochim)
 ```
-Ici on peut voir qu'on à 0 chimère dans notre jeu de donnée.
+Ici on peut voir qu'on à 22% de chimères dans notre jeu de donnée.
 ```{r}
 1-sum(seqtab.nochim)/sum(seqtab)
 ```
@@ -141,16 +144,16 @@ head(track)
 # Assign taxonomy
 Ici nous avons du récupérer silva afin d'analyser et d'assigner les taxonomies.
 ```{bash}
-wget https://zenodo.org/record/3986799/files/silva_species_assignment_v138.fa.gz
+wget https://zenodo.org/record/3986799/files/silva_nr99_v138_train_set.fa.gz
 ```
 Ici nous créons une variable qui va recevoir les espèces obtenues grâce à Silva
 
 ```{r}
-taxa <- assignTaxonomy(seqtab.nochim, "~/silva_nr99_v138_train_set.fa.gz", multithread=TRUE)
+taxa <- assignTaxonomy(seqtab.nochim, "/home/rstudio/ECOG2_CC2/silva_nr99_v138_train_set.fa.gz", multithread=TRUE)
 ```
 
 ```{r}
-taxa <- addSpecies(taxa, "~/silva_species_assignment_v138.fa.gz")
+taxa <- addSpecies(taxa, "/home/rstudio/ECOG2_CC2/silva_nr99_v138_train_set.fa.gz")
 ```
 On remarque donc après avoir affiché la table qu'on a créée on obtient une majorité de  Bacteroidetes ce qui est normal dans des échantillons fécaux. D'autres espèces n'ont pas pu être assignées car on a peu de données sur les bactéries des intestins des souris. 
 ```{r}
