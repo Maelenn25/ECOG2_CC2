@@ -5,7 +5,8 @@ output:
     toc: true
     toc_depth: 2
 ---
-
+# Dada2
+## chargement des librairies
 ```{r}
 library(dada2)
 library(phyloseq)
@@ -20,18 +21,23 @@ library(igraph)
 library(ggnetwork)
 theme_set(theme_bw())
 ```
-
+## acquisition des données
 ```{bash}
 wget https://pagesperso.univ-brest.fr/~maignien/teaching/M1-MFA/UE-Ecogenomique2/EcoG2_data_cc2.tar.gz
 tar xvzf EcoG2_data_cc2.tar.gz
 ```
 
-#création variable
+Ici nous récupérons la taxonomie silva afin d'analyser et d'assigner les taxonomies.
+```{bash}
+wget https://zenodo.org/record/3986799/files/silva_nr99_v138_train_set.fa.gz
+```
+## création d'une variable contenant les données
+Nous avons donc les séquençages des régions v4-v5 des échantillons prélevés dans la rade de Brest le 10 septembre 2014 et le 11 mars 2015 à différentes profondeurs
 ```{r}
 path <- "~/ECOG2_CC2/sequences_reunies" # CHANGE ME to the directory containing the fastq files after unzipping.
 list.files(path)
 ```
-## filtration et retirage des sequences basse qualité
+## filtration et éliminations des sequences basse qualité
 ```{r}
 # Sort ensures forward/reverse reads are in same order
 fnFs <- sort(list.files(path, pattern="_R1.fastq"))
@@ -47,11 +53,12 @@ print(fnRs)
 ```{r}
 fnRs[1:11]
 ```
-
+Le plot quality profile nous permets d'analyser les nucléotides pour lesquels la qualité du séquençage décroit. 
+Pour les séquences forward, qui sont de meilleures qulités que les reverses dû à la méthode de séquençage, la qualité décroit à partir de 240 nucléotides. 
 ```{r}
 plotQualityProfile(fnFs[1:3])
 ```
-
+Pour les séquences reverse, la qualité décroit à partir de 150 nucléotides et le Q score devient vraiment mauvais à partir de 200 nucléotides.
 ```{r}
 plotQualityProfile(fnRs[1:2])
 ```
@@ -65,7 +72,7 @@ names(filtRs) <- sample.names
 sample.names
 print(filtFs)
 ```
-
+Nous coupons ici les séquences au niveau des nucléotides précédemment énoncés. Nous choisissons de ne couper qu'à 200 nucléotides pour les reverse pour garder un overlap assez important. 
 ```{r}
 out<-filterAndTrim(fnFs, filtFs, fnRs, filtRs, truncLen=c(240,200),trimLeft=c(21),
               maxN=0, maxEE=c(2,2), truncQ=2, rm.phix=TRUE,
@@ -76,7 +83,7 @@ out<-filterAndTrim(fnFs, filtFs, fnRs, filtRs, truncLen=c(240,200),trimLeft=c(21
 head(out)
 ```
 # Learn the Error Rates
- Nous allons ici utiliser des lignes de commandes qui vont permettre d'apprendre à la machine les différents profils d'erreurs générées lors du séquençage. L'opération est faite sur les deux types de séquence.
+ Nous allons ici utiliser des lignes de commandes qui vont permettre d'apprendre à la machine les différents profils d'erreurs générées lors du séquençage. L'opération est faite sur les séquences reverse et forward.
  
 ```{r}
 errF <- learnErrors(filtFs, multithread=TRUE)
@@ -85,10 +92,8 @@ errF <- learnErrors(filtFs, multithread=TRUE)
 ```{r}
 errR <- learnErrors(filtRs, multithread=TRUE)
 ```
-Chaque transition (mutation) possible (A→C, A→G, ...) le taux d'erreur sont indiqués. 
--points : les taux d'erreur observés pour chaque score de qualité du consensus. 
--ligne noire : taux d'erreur estimés après convergence de l'algorithme d'apprentissage machine. 
--ligne rouge : taux d'erreur attendus selon la définition nominale du Q-score.
+ici nous visualisons la probabilité d'obtenir une erreur de la machine remplaçant une base par une autre (A→C, A→G, ...) le taux d'erreur sont indiqués pour chaque combinaison possible pour les séquences reverse et forward. 
+Chaque point représentent les taux d'erreur observés pour chaque score de qualité du consensus. La ligne noire montre le taux d'erreur estimés après convergence de l'algorithme d'apprentissage machine et la ligne rouge montre le taux d'erreur attendus selon la définition nominale du Q-score.
 ```{r}
 plotErrors(errF, nominalQ=TRUE)
 ```
@@ -106,12 +111,12 @@ dadaFs <- dada(filtFs, err=errF, multithread=TRUE)
 ```{r}
 dadaRs <- dada(filtRs, err=errR, multithread=TRUE)
 ```
-Cette commande nous permet de visualiser le résultat global qu'on retrouve classé dans la liste dadaFs. Ils nous indiquent que sur les séquences on retrouve 128 séquences qui correspondent aux vrais variants, par rapport aux 1979 séquences. Ils nous indiquent aussi les diagnostiques de qualité.
+Cette commande nous permet de visualiser le résultat global qu'on retrouve classé dans la liste dadaFs. Ils nous indiquent que sur les séquences on retrouve 1010 séquences qui correspondent aux vrais variants, par rapport aux 37907 séquences. 
 ```{r}
 dadaFs[[1]]
 ```
 # Merge paired reads
-Ici nous voulons mettre en une seule séquence les Forwards et les Reverses.Nous pouvons faire cette opération grâce aux overlaps de 12 paires de base. Cela se fait grâce à un alignement entre les forwards et les reverses qui vont permettre de contruire les contigs.
+Ici nous voulons mettre en une seule séquence double brin les Forwards et les Reverses. Nous pouvons faire cette opération grâce aux overlaps. Cela se fait grâce à un alignement entre les forwards et les reverses qui vont permettre de contruire les contigs.
 ```{r}
 mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose=TRUE)
 # Inspect the merger data.frame from the first sample
@@ -134,12 +139,12 @@ Malgré qu'on ait pu appliquer les modèles d'erreurs aux séquences, il reste d
 seqtab.nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=TRUE, verbose=TRUE)
 dim(seqtab.nochim)
 ```
-Ici on peut voir qu'on à 22% de chimères dans notre jeu de donnée.
+Ici on peut voir qu'on à 22% de chimères dans notre jeu de donnée. Ce chiffre important peut être dû à la qualité des séquences reverse qui était assez moyenne sur la fin.
 ```{r}
 1-sum(seqtab.nochim)/sum(seqtab)
 ```
 # Track reads through the pipeline
-Ce code nous permet de visualiser le nombre de séquences obtenues à la suite de toutes nos manipulations de filtrage. Ici nous pouvons voir qu'on a pu récupérer la plupart de nos séquences brutes, ce qui est signe d'une bonne qualité de séquençage.
+Ce code nous permet de visualiser le nombre de séquences obtenues à la suite de toutes nos manipulations de filtrage. Ici nous pouvons voir qu'on a pu récupérer la plupart de nos séquences brutes, ce qui est signe d'une bonne qualité de séquençage globale (malgré les 22% de chimères).
 ```{r}
 getN <- function(x) sum(getUniques(x))
 track <- cbind(out, sapply(dadaFs, getN), sapply(dadaRs, getN), sapply(mergers, getN), rowSums(seqtab.nochim))
@@ -149,11 +154,8 @@ rownames(track) <- sample.names
 head(track)
 ```
 # Assign taxonomy
-Ici nous avons du récupérer silva afin d'analyser et d'assigner les taxonomies.
-```{bash}
-wget https://zenodo.org/record/3986799/files/silva_nr99_v138_train_set.fa.gz
-```
-Ici nous créons une variable qui va recevoir les espèces obtenues grâce à Silva
+
+Nous créons ainsi une variable qui va recevoir les espèces obtenues grâce à Silva
 
 ```{r}
 taxa <- assignTaxonomy(seqtab.nochim, "/home/rstudio/ECOG2_CC2/silva_nr99_v138_train_set.fa.gz", multithread=TRUE)
@@ -162,7 +164,7 @@ taxa <- assignTaxonomy(seqtab.nochim, "/home/rstudio/ECOG2_CC2/silva_nr99_v138_t
 ```{r}
 taxa <- addSpecies(taxa, "/home/rstudio/ECOG2_CC2/silva_species_assignment_v138.fa.gz")
 ```
-On remarque donc après avoir affiché la table qu'on a créée on obtient une majorité de  Bacteroidetes ce qui est normal dans des échantillons fécaux. D'autres espèces n'ont pas pu être assignées car on a peu de données sur les bactéries des intestins des souris. 
+On remarque donc après avoir affiché la table qu'on a créée on obtient une majorité de  Alphaproteobacteries et plus précisément les bactéries de la clade SAR11 (=Candidatus Pelagibacter ubique). En effet, cet ordre de bactérie est l'ordre le plus représenté dans les océans : elle a une répartition mondiale. Ce résultat est donc cohérent. 
 ```{r}
 taxa.print <- taxa # Removing sequence rownames for display only
 rownames(taxa.print) <- NULL
@@ -170,24 +172,20 @@ head(taxa.print)
 ```
 
 # Taxonomic Filtering
-
+création des variables permettant d'organiser les 11 échantillons selon la date et la profondeur.
 ```{r}
 samples.out <- rownames(seqtab.nochim)
-profondeur <- sapply(strsplit(samples.out, "D"), `[`, 1)
-date <- substr(profondeur,0,1557)
+profondeur <- sapply(strsplit(samples.out, "_"), `[`, 2)
+profondeur <- (sapply(strsplit(samples.out, "_"), `[`, 3))
+date <- substr(profondeur,1,11)
 samdf <- data.frame(Profondeur=profondeur, Date=date)
-samdf$Profondeur[samdf$Date>1557] <- c("Fond","Median","Surface")
-samdf$Date[samdf$Profondeur>1557] <- c("10sept14","11mars15")
+samdf$Profondeur <- c("Fond","Fond","Fond","Fond","Fond", "Median","Median","Surface","Surface","Surface","Surface")
+samdf$Date[samdf$Profondeur==11] <- c("mars","sept")
 rownames(samdf) <- samples.out
 ```
-```{r}
-write.csv(samdf, "samdf.csv")
-```
+Entre temps nous avons dû créer une table manuellement afin de réorganiser les séquences, les informations de profondeurs et des dates ne correspondant pas.
 
-```{r}
-samdf <-read.table("~/ECOG2_CC2/samdf.csv", sep=",", header=TRUE, row.names = 1)
-```
-
+# création de l'arbre phyloseq 
 ```{r}
 library(phangorn)
 library(DECIPHER)
@@ -209,6 +207,12 @@ ps <- phyloseq(otu_table(seqtab.nochim, taxa_are_rows=FALSE),
                tax_table(taxa), phy_tree(fitGTR$tree))
 ps
 ```
+## Visualisation de l'alpha diversité 
+L'alpha diversité permet de mesurer la richesse observée. L'alpha diversité peut se calculer de plusieurs façon grâce à différents indices, ce qui nous permet de les comparer. Ici nous pouvons voir que les communautés en mars, que ce soit pour les echantillons du fond et de surface, possède un indice d'alpha diversité similaire : ils contiennent une communauté de richesse semblables. Un indice avec une forte valeur traduit la présence d'une communauté qui prend le dessus sur les autres : nous savons donc qu'en mars, en surface et en profondeur, il y a des communautés dominantes qui seront retrouvées en grand nombre, et des communautés bien moins représentées.
+En revanche, pour les échantillons prélevés en septembre, nous pouvons clairement distinguer des richesses différentes entre les profondeurs différentes auxquelles les échantillons ont été prélevés. Nous pouvons ainsi voir que les echantillons prélevés profondémment ont un indice d'alpha diversité élevé (et correspondant plus ou moins à celui retrouvé en Mars). Cela traduit deux choses : en profondeur, nous pouvons retrouver une structure communautaire stable car elle ne semble pas varier en fonction des saisons (concernant la structure, ici nous ne pouvons pas dire si ce sont les mêmes communautés qui dominent ou si elles changent en fonction des saisons). Cependant il faudrait faire un prélevement au printemps et en automne afin de s'assurer que cette hypothèse soit vraie. L'autre hypothèse que nous pouvons tirer de cela est qu'en profondeur, il y a surement moins de variation de température et de luminosité par rapport à la surface et à la profondeur médiane. Cela expliquerait la stabilité des structures communautaires en profondeur dû à la stabilité du milieu.
+Le milieu médian n'a été étudié qu'en septembre. Cela ne nous permet pas d'en avoir un aperçu au cours du temps. Néanmoins, ce milieu a un indice alpha inférieur à celui du milieu profond, on peut voir que la communauté à une structure un peu plus partagée entre les espèces par rapport à celle de la profondeur.
+A la surface, nous pouvons voir un indice bien plus faible par rapport aux autres milieu en septembre : les communautés présentent sont plus équitablement réparties, il y a moins de communautés minoritaires par rapport aux communautés majoritaires. Ces dernières sont présentes mais dans une moins dre mesure par rapport aux communautés profondes par exemple. 
+En revanche, en mars, la structure des communautés change et devient semblable à celle des profondeurs, avec des OTUs qui vont devenir plus largement majoritaires et d'autres qui seront plus minoritaires.
 ```{r}
 plot_richness(ps, x="Date", measures=c("Shannon", "Simpson"), color="Profondeur")
 ```
@@ -217,7 +221,8 @@ plot_richness(ps, x="Date", measures=c("Shannon", "Simpson"), color="Profondeur"
 # Show available ranks in the dataset
 rank_names(taxa.print)
 ```
-Sur la table affichée, nous pouvons compter 6 échantillons qui n'ont pas de phyla defini. Cela peut etre dû à une mauvaise filtration : ce serait des artefacts.
+Sur la table affichée, nous pouvons compter 12 échantillons qui n'ont pas de phyla defini. Cela peut etre dû à une mauvaise filtration : ce serait des artefacts.
+On peut voir que les bactéries dominantes sont les Proteobactéria, les Bacteroidota et des Cyanobactéria. Ces 3 grands phylums contiennent bien des bactéries marines, ce qui est attendu. Nous pouvons voir plusieurs phylums comportant moins de 10 représentants, ils sont retirés. Cela peut être dû à des erreurs de taxonomie. Même si ce n'est pas le cas, au vu du peu de représentants présents pour ces phylums, nous pouvons les retirer car ils ne sont probablement pas très représentatifs de la structure de ces communautés. 
 ```{r}
 # Create table, number of features for each phyla
 table(tax_table(ps)[, "Phylum"], exclude = NULL)
@@ -225,17 +230,11 @@ table(tax_table(ps)[, "Phylum"], exclude = NULL)
  Ce code nous permet de nous assurer ques les séquences pour lesquelles les anotations sont ambigues vont bien être retirées.
 
 ## Filtrage de la taxonomie
-### Indiquer les rangs dans l'ensemble des données
-
-La fonction rank-names: permet de déterminer les rangs taxonomiques de ps 
-```{r}
-rank_names(taxa.print)
-```
 
 ```{r}
 ps <- subset_taxa(ps, !is.na(Phylum) & !Phylum %in% c("", "uncharacterized"))
 ```
-Ici nous allons mesurer la prévalence, qui sera dans le cadre de cette étude le nombre d'echantillons par taxon (avec au minimum un echantillon par taxon du coup)
+Ici nous allons mesurer la prévalence, qui sera dans le cadre de cette étude le nombre d'echantillons par taxon
 
 ```{r}
 # Compute prevalence of each feature, store as data.frame
@@ -247,11 +246,11 @@ prevdf = data.frame(Prevalence = prevdf,
                     TotalAbundance = taxa_sums(ps),
                     tax_table(ps))
 ```
-Cette commande nous permet d'evaluer la prévalence moyenne de chaque phylum (colonne1) et la prévalence totale (colonne2). Les résultats de cette commande nous montre que Fusobacteria est trouvée seulement 2 fois. idem pour deinococcus-thermus qui n'est retrouvé que dans un seul échantillon (même si au sein de cet echantillon nous l'y retrouvons 52 fois).Nous allons donc le retirer car il risque de nous gêner.
+Cette commande nous permet d'evaluer la prévalence moyenne de chaque phylum (colonne1) et la prévalence totale (colonne2). Cela nous permet de confirmer les résultats du dessus et de pouvoir éliminer les phylums peu importants.
 ```{r}
 plyr::ddply(prevdf, "Phylum", function(df1){cbind(mean(df1$Prevalence),sum(df1$Prevalence))})
 ```
-
+Le code permettant de retirer ces taxons est ci-dessous.
 ```{r}
 # Define phyla to filter
 filterPhyla = c("Campilobacterota", "Dependentiae", " Crenarchaeota","Desulfobacterota", "Dadabacteria ", "Fibrobacterota", " Hydrogenedentes", "NB1-j", " PAUC34f", " Elusimicrobiota", "Gemmatimonadota", "Myxococcota")
@@ -262,6 +261,8 @@ ps1
 # Prevalence Filtering
  Ces manipulations nous permettent de voir si nous avons manqué de voir des echantillons mal definis ou en tres faible quantité qui devraient etre retirés. On va aussi pouvoir avoir un aperçu des séquences qui sont rangées dans chaque features. 
 Ici; chaque point représente un taxa. Nous ne voyons pas de seuil de prévalence clairement établi ici. Nous avons donc des taxons assez stables. Néanmoins nous pouvons fixer manuelle le seuil de prévalence quelque part entre 0 et 10% (en verifiant qu'il n'y a pas d'impact non attendu sur la suite de l'étude)
+
+Sans surprise, les phylums les plus représentés sont ceux qui ont le plus de prévalence. 
 ```{r}
 # Subset to the remaining phyla
 prevdf1 = subset(prevdf, Phylum %in% get_taxa_unique(ps1, "Phylum"))
@@ -316,7 +317,7 @@ p4tree = plot_tree(ps4, method = "treeonly",
 library (gridExtra)
 gridExtra::grid.arrange
 ```
-Sur la gauche nous retrouvons l'arbre original, au milieu l'arbre généré par agglomération taxonomique et à droit l'arbre généré par aggrégation phylogénique. On peut voir que les deux agglomérations nous permettent de clarifier les arbres. De plus, les arbres obtenus avec les deux types d'agglomération sont assez ressemblant.
+Sur la gauche nous retrouvons l'arbre original, au milieu l'arbre généré par agglomération taxonomique et à droit l'arbre généré par aggrégation phylogénique. On peut voir que les deux agglomérations nous permettent de clarifier les arbres. De plus, les arbres obtenus avec les deux types d'agglomération sont assez ressemblants.
 ```{r}
 # group plots together
 grid.arrange(nrow = 1, p2tree, p3tree, p4tree)
@@ -324,6 +325,7 @@ grid.arrange(nrow = 1, p2tree, p3tree, p4tree)
 # Abundance value transformation : profondeur
 on peut avoir besoin de transformer nos données pour pouvoir calculer des variances. 
 On va d'abord utiliser la fonction "plot_abundance" pour definir un graphique d'abondance relative. Cela va nous permettre de comparer facilement les différentes échelles et les distributions d'abondance avant de les transformer.
+Ici nous allons choisir d'observer l'abondance des bactéries du phylum "Bdellovironota" en fonction de la profondeur. Ce phylum est interessant car il est assez présent mais non majoritaire, ce qui nous permettra de voir si il va vraiment varier en fonction des prélevements, alors que les phylums très représentés seront surement assez stables. 
 ```{r}
 plot_abundance_P = function(physeq,title = "",
                           Facet = "Order", Color = "Phylum"){
@@ -345,7 +347,7 @@ la fonction "transform_sample_counts" pour transformer les dénombrements en leu
 # Transform to relative abundance. Save as new object.
 ps3ra_P = transform_sample_counts(ps3, function(x){x / sum(x)})
 ```
-On va donc pouvoir tracer le graphique des valeurs d'abondances avant et après transformation. On peut voir qu'après les transformations, les valeurs d'abondances relatives sont mieux réparties et permettent une lecture plus aisées des différents paramètres. 
+On va donc pouvoir tracer le graphique des valeurs d'abondances avant et après transformation. On peut voir qu'après les transformations, les valeurs d'abondances relatives sont mieux réparties et permettent une lecture plus aisées des différents paramètres. Nous pouvons voir ici que c'est la famille des Bdellovibrionales qui est plus abondante par rapport aux bacteriovoracales. Nous allons donc les isoler aux codes suivant pour mieux les étudier. 
 
 ```{r}
 plotBefore_P= plot_abundance_P(ps3,"")
@@ -354,16 +356,15 @@ plotAfter_P = plot_abundance_P(ps3ra_P,"")
 grid.arrange(nrow = 1,  plotBefore_P, plotAfter_P)
 ```
 
-# Subset by taxonomy
-On remarque que les Bdellovibrionales apparaissent comme une distribution taxonomique bimodale. On va donc chercher à examiner les taxons du genre Lactobacillales pour expliquer cette répartition bimodale. Pour cela nous allons préciser le taxon dont nous voulons avoir le graphique.
-Lorsqu'on regarde les graphiques, on remarque les abondances relatives en fonction du sexe de l'hote sur lequelle les bactéries ont été prélevées. Ici il apparait donc clairement que la répartition bimodale de Lactobacillales provient Streptococcus (moins abondant) et de Lactobacillus qui a une abondance relative très élevée.
+Ici nous avons voulu analyser l'ordre des Bdellovibrio, dont fait partie la clade OM27. 
+Lorsqu'on regarde les graphiques, on remarque les abondances relatives en fonction de la profondeur comme expliqué precemment. Ici nous pouvons voir qu'en profondeur, cette clade à une abondance supérieur à par rapport aux autres, et cette abondance décline au fur et à mesure qu'on remonte à la surface. 
 ```{r}
 psOrd_P = subset_taxa(ps3ra_P, Order == "Bdellovibrionales")
 plot_abundance_P(psOrd_P, Facet = "Genus", Color = NULL)
 ```
 # Abundance value transformation : date
 on peut avoir besoin de transformer nos données pour pouvoir calculer des variances. 
-On va d'abord utiliser la fonction "plot_abundance" pour definir un graphique d'abondance relative. Cela va nous permettre de comparer facilement les différentes échelles et les distributions d'abondance avant de les transformer.
+On va d'abord utiliser la fonction "plot_abundance" pour definir un graphique d'abondance relative. Cela va nous permettre de comparer facilement les différentes échelles et les distributions d'abondance avant de les transformer. Ici nous nous intéressons donc à la variance en fonction de la date pour compléter les analyses faites en profondeur.
 ```{r}
 plot_abundance_D = function(physeq,title = "",
                           Facet = "Order", Color = "Phylum"){
@@ -393,29 +394,22 @@ plotAfter_D = plot_abundance_D(ps3ra_D,"")
 # Combine each plot into one graphic.
 grid.arrange(nrow = 1,  plotBefore_D, plotAfter_D)
 ```
-
-# Subset by taxonomy
-
+En regardant cette analyse, nous pouvons voirqu'il y a une différence d'abondance notable pour la clade OM27 par rapport à la date de prélevement. 
+Ces bactéries sont très abondantes au sein des échantillons prélevés en septembre, tandis qu'ils sont moins présents (un facteur 10 en moins) en mars.
+Nous pouvons donc voir, au vu des analyses par date et par profondeur, que les bactéries appartenant à cette clade seront plutôt retrouvées en grande quantité en profondeur en sortie d'été où l'eau est surement un peu plus chaude, par rapport à mars. Selon un article intitulé "Diverse, uncultivated bacteria and archaea underlying the cycling of dissolved protein in the ocean" par William D Orsi et al., les bactéries de la clade OM27 sont proches des bdellovibrios ce qui est logique par rapport à nos codes, et sont des bactéries très présentes dans les océans. Ce sont des bactéries qui n'ont pas encore été cultivées, et seraient probablement des bactéries prédatrices, influant sur la présence des protéines dissoutes dans l'océan. Cette caractéristique peut peut être nous aider à comprendre sa distribution : 
+En hiver, la nourriture se fait peut-être plus rare, alors qu'en été l'eau est plus riche en nutriments et en proies potentielles pour OM27, ce qui permet de mieux se developper. Sa présence dans les pronfondeurs pourrait être expliquée par la température et l'oxygénation de l'eau qui serait plus adéquate pour l'organisme. Nous pouvons aussi supposer que la surface et le milieu médian contiennent également des prédateurs, qui rentreraient en compétition avec OM27, ce qui l'inciterait à plutôt se developper en profondeur.  
 ```{r}
 psOrd_D = subset_taxa(ps3ra_D, Order == "Bdellovibrionales")
 plot_abundance_D(psOrd_D, Facet = "Genus", Color = NULL)
 ```
 
-# Première PcoA
-
-Avec ce code, nous cherchons à analyser les deux femelles préalablement citées.Elles contiennent un même ASV qui qui a une forte abondance relative (90%). C'est la première fois qu'il y a une telle abondance car le reste du temps il a une abondance inférieure à 20%. De plus, sa diversité est la plus basse parmis tous les échantillons.
-```{r}
-rel_abund <- t(apply(otu_table(ps), 1, function(x) x / sum(x)))
-qplot(rel_abund[, 12], geom = "histogram",binwidth=0.05) +
-  xlab("Relative abundance")
-```
 # Different Ordination Projections
-Nous allons demander à la machine de nous calculer une analyse par PcoA en utilisant l'indice de dissimilarité de Bray-Curtis. En regardant la figure obetnue, on peut clairement voir que l'age influence les communautés microbiennes retrouvées, avec une séparation vraiment nette entre les ASV des souris jeune et les souris d'âge moyen. Les souris plus agées semblent être retrouvées groupées avec les ASVs des souris moyennement agées. Si nous observons le second axe, nous pouvons trouver que les échantillons avec un plus grand score, ce qui correspond aux échantillons des souris moyennement agées et plus agées, sont les échantillons avec beaucoup de taxon appartenant aux Bacteroidetes avec un sous groupe de Firmicutes.
+Nous allons demander à la machine de nous calculer une analyse par PcoA en utilisant l'indice de dissimilarité de Bray-Curtis. Ici nous allons donc pouvoir regrouper ensemble les échantillons les plus proches et les différencier des échantillons vraiment différents. 
 ```{r}
 ps <- prune_samples(rowSums(otu_table(ps)) > 1000, ps)
 pslog <- transform_sample_counts(ps, function(x) log(1 + x))
 ```
-
+On peut donc voir que tous les échantillons de mars sont regroupés ensemble, sans distinction entre la surface et la profondeur. Cela correspond avec ce qui était attendu au vu de l'analyse de l'alpha diversité. En septembre nous pouvons voir que cette fois ci les echantillons sont séparés en fonction de la profondeur à laquelle ils ont été prélevés. Cela correspond aussi avec ce que nous avons vu lors de l'analyse de l'alpha diversité : les échantillons de surface sont regroupés ensemble, idem pour le milieu médian et profond. 
 ```{r}
 out.pcoa.log <- ordinate(pslog,  method = "MDS", distance = "bray")
 evals <- out.pcoa.log$values[,1]
@@ -424,9 +418,8 @@ plot_ordination(pslog, out.pcoa.log, color = "Date",
   labs(col = "Date", shape = "Pronfondeur")+
   coord_fixed(sqrt(evals[2] / evals[1]))
 ```
-
 # Double principal coordinates analysis (DPCoA)
-Cette PcoA est clairement dominée par l'axe 1, qui exprime 75% de variabilité, contre 8,5 sur l'Axe2. Cela est obtenu dû à l'ajout des informations phylogénétiques pour pouvoir générer cette PcoA.
+Nous vons voulu voir si cette tendance etait conservée lors d'une DPCoA. Cela nous permet de souligner les distances entre les echantillons en utilisant une table d'abondance et les données phylogénétiques. Cela permet de renforcer les différences trouvées entre les échantillons. Ici nous pouvons donc voir la même chose que pour la PCoA. Les échantillons fond/surface restent bien mélangés en mars. Cela nous montre que les communautés varient assez peu comme nous avons pu supposer. En revanche en septembre les communautés restent bien séparées en fonction des profondeurs. 
 ```{r}
 out.dpcoa.log <- ordinate(pslog, method = "DPCoA")
 evals <- out.dpcoa.log$eig
@@ -435,40 +428,8 @@ plot_ordination(pslog, out.dpcoa.log, color = "Date",
   labs(col = "Date", shape = "Profondeur")+
   coord_fixed(sqrt(evals[2] / evals[1]))
 ```
-Nous allons donc chercher quel taxa est responsable de la PcoA juste au dessus. Pour cela nous allons faire un DPcoA, qui utilise l'abondance et les informations phylogénétiques contenues dans la classe phyloseq. L'objet final représente la distance patristique (somme des longueurs des branches qui joignent deux points) et cophenetique développée plus haut. Dans cette DPcoA, nous pouvons revoir que l'âge a un effet dans cette répartition. On peut y voir que quasiment tous les phylums représentés sur cette DPcoA sont ensembles, mis à part les Bactéroidetes qui sont assez dissimilaires au reste.  
+Ici nous avons voulu faire une ordination permettant de voir la dissimilarité entre les phylums. Nous pouvons voir se distinguer 4 grands phylums qui se trouvent à part : les cyanobactéries,les bdellvibrios/Bacteroidota, les marinimicrobia et les protéobatéria. Les autres phylums sont confondus. Ces 5 phylums seront donc sûrement les phylums clef pour expliquer les répartitions de communauté, car ils sont assez dissimilaires entre eux pour être correctement distinguables. 
 ```{r}
 plot_ordination(pslog, out.dpcoa.log, type = "species", color = "Phylum") +
   coord_fixed(sqrt(evals[6] / evals[10]))
 ```
-# Bar plot
-
-```{r}
-top20 <- names(sort(taxa_sums(ps), decreasing=TRUE))[1:20]
-ps.top20 <- transform_sample_counts(ps, function(OTU) OTU/sum(OTU))
-ps.top20 <- prune_taxa(top20, ps.top20)
-plot_bar(ps.top20, x="Date", fill="Genus") + facet_wrap(~Profondeur, scales="free_x")
-```
-
-
-```{r}
-top20 <- names(sort(taxa_sums(ps), decreasing=TRUE))[1:20]
-ps.top20 <- transform_sample_counts(ps, function(OTU) OTU/sum(OTU))
-ps.top20 <- prune_taxa(top20, ps.top20)
-plot_bar(ps.top20, x="Date", fill="Order") + facet_wrap(~Profondeur, scales="free_x")
-```
-
-```{r}
-net <- make_network(ps, max.dist=0.35)
-sampledata <- data.frame(sample_data(ps))
-V(net)$date <- sampledata[names(V(net)), "Date"]
-V(net)$Profondeur <- sampledata[names(V(net)), "Profondeur"]
-net_graph <- ggnetwork(net)
-ggplot(net_graph, aes(x = x, y = y, xend = xend, yend = yend), layout = "fruchtermanreingold") +
-  geom_edges(color = "darkgray") +
-  geom_nodes(aes(color = date, shape = Profondeur),  size = 3 ) +
-  theme(axis.text = element_blank(), axis.title = element_blank(),
-        legend.key.height = unit(0.5,"line")) +
-  guides(col = guide_legend(override.aes = list(size = .5)))
-```
-
-
