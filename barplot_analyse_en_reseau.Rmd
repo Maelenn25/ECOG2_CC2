@@ -5,6 +5,10 @@ output:
     toc: true
     toc_depth: 2
 ---
+```{r}
+load("env_barplot.RData")
+```
+
 ## chargement des librairies
 ```{r}
 library(dada2)
