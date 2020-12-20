@@ -1,0 +1,45 @@
+---
+title: "R Notebook"
+output: 
+  github_document:
+    toc: true
+    toc_depth: 2
+---
+
+# Bar plot
+Ces bar plots nous permettent de visualiser la composition des communautés en fonction de la profondeur et de la date. Nous avons choisi de visualiser cela en fonction des phylums, de l'ordre.
+Globalement, on voit que les milieux médian et de surface sont plutôt similaires, mettant à part le milieu profond, ce qui coincide avec ce que nous avons pu visualiser lors de nos précédentes analyses.
+Pour les phylums, les plus abondants correspondent aux phylims mentionnés au dessus. Nous pouvons voir que les protéobactéries dominent largement tous les milieux à n'importe quelle date. Cela est dû au fait que ce phylum est très riche et contient énormément de bactéries différentes. Les cyanobactéries sont le deuxième phylum le plus abondant en surface et en milieu médian. elles sont peu nombreuses en profondeur. Cela est dû à leur capacité de photosynthèse, leur permettant d'utiliser l'énergie lumineuse. Ainsi dans le fond, la lumière est beaucoup moins présente, ce qui explique leur faible abondance dans ce milieu. 
+Ces données sont intéréssantes mais restent trop générales, nous allons donc nous pencher sur les différents ordres. 
+```{r}
+top20 <- names(sort(taxa_sums(ps), decreasing=TRUE))[1:20]
+ps.top20 <- transform_sample_counts(ps, function(OTU) OTU/sum(OTU))
+ps.top20 <- prune_taxa(top20, ps.top20)
+plot_bar(ps.top20, x="Profondeur", fill="Phylum") + facet_wrap(~Date, scales="free_x")
+```
+
+
+Si nous nous interessons aux ordres, nous pouvons voir que les Synechococcales et la clad SAR11 sont les plus présents dans une profondeur médiane et en surface en septembre. En revanche, en mars, la clade SAR11 reste majoritaire, mais les synechococcales ne sont plus présente. En revanche sur cette période nous pouvons voir l'apparition des bactéries chloroplastiques. Les synechococcales sont des cyanobactéries, hors en mars il fait généralement moins beau qu'en septembre (giboulés, tempêtes hivernales, pluie fréquentes car nous sommes à Brest, etc.). Cet ordre pourra moins se développer qu'en septembre dû au plus faible taux d'ensoleillement. La clade SAR11 fait partie des Pelagibacteriales. Ce sont des bactéries extremement présentes dans les océans, ce qui explique leur abondance au sein de toutes les communautés. Cet ordre contient notamment Pelagibacter ubique qui est très représenté. Cette espèce consomme du carbone et de l'azote organique dissouts et n'est pas photosynthétique, ce qui explique son developpement important dans les océans.
+En mars en surface et en continu en profondeur, nous pouvons également voir la présence de Thiomicrospirales. La présence de cette bactérie en profondeur n'est pas étonnante, car des études notamment menées par Simone muck, montrent que cette bactérie est capable de se developper dans des milieux pauvres en oxygène. On sait queles cycles biogéo-chimiques de l'océan varient au cours du temps et des endroits. Cela influence sur le cycle de l'azote et du carbone, de la production et de la remineralisation des matières organiques ou encore l'augmenation de la production du dioxyde de carbone dans les colonnes d'eau plutôt situées dans des eaux froides (Yian liu et al., 2019). Toutes ces modifications sont faites grâce aux microorganismes, et peut permettre d'expliquer la présence ou l'absence d'une bactérie donnée. De plus, l'océan n'est pas un milieu stable, la présence de courants par exemple va jouer un rôle important sur la mobilisation des communautés.
+Ici l'ordre peut être suffisant dans l'analyse des communautés, car il permet d'avoir un ordre global des types de bactérie présentes. Nous pouvons déjà visualiser les changements opérés au sein des communautés et avoir un bon aperçu de ce qui se passe en fonction du temps et de la profondeur.
+```{r}
+top20 <- names(sort(taxa_sums(ps), decreasing=TRUE))[1:20]
+ps.top20 <- transform_sample_counts(ps, function(OTU) OTU/sum(OTU))
+ps.top20 <- prune_taxa(top20, ps.top20)
+plot_bar(ps.top20, x="Profondeur", fill="Order") + facet_wrap(~Date, scales="free_x")
+```
+Nous avons voulu pour finir faire une analyse en réseau afin de pouvoir lier directement l'effet de la température (date) et de la profondeur. Nous pouvons clairement voir encore une fois qu'en Mars, les communautés du fond et de la surface sont liées. Nous pouvons en revanche voir qu'en septembre, les communautés en profondeur sont a part, et que les communautés de la surface et du milieu médian sont liées entre-elles. Concernant mars, nous pouvons faire plusieurs hypothèses. Il faut déjà prendre en compte que même si nous pouvons avoir des profondeurs importantes dans la rade de brest (8m), cela reste relativement peu comparé à d'autres profondeurs connues dans le monde. En mars, nous avons des tempètes fréquentes, les giboulés, en mars 2014 il y a aussi eu une grande marée le 4 mars. Ces aléas peuvent participer à remuer le fond de l'eau et a mélanger les différents micro-environnement se situant en mer, ce qui expliquerait pourquoi les communautés sont si semblables. De plus, la présence du gulf stream qui permet d'avoir des températures plus douces en hiver par exemple. 
+En septembre, nous pouvons trouver moins d'aléas météorologiques, et l'eau se réchauffe de 5 degrès avec une température moyenne de 15,2°C par rapport à mars (température moyenne de 10,2°C). Ce réchauffement aura principalement lieu dans les milieux à la surface, les rayons du soleil pénétrant plus en surface qu'en profondeur. En septembre 2015 les grandes marées se sont passées après la collecte, donc les communautés n'ont pas été afféctées par ce phénomène. Nous pouvons présumer qu'en surface et en milieu médian, les températures sont sensiblement identiques, ce qui est un facteur qui permet de trouver des communautés semblables par rapport au fond. De plus, en sortie d'été, nous pouvons retrouver beaucoup de nourritures et de micro-déchets (micro-algues, restes d'animaux marins, plus d'organismes car le printemps est passé et la reproduction a pu se faire, etc.). Moins d'organismes se développent dans le fond des océans, car la nourriture et la lumière y est plus rare, ce qui permettrait d'y retrouver moins d'organismes : en septembre, si nous avons plus de substrats et de sources d'energie disponibles en surface par exemple, il sera plus avantageux d'en profiter plutôt que de rester dans le fond de la rade. 
+```{r}
+net <- make_network(ps, max.dist=0.35)
+sampledata <- data.frame(sample_data(ps))
+V(net)$date <- sampledata[names(V(net)), "Date"]
+V(net)$Profondeur <- sampledata[names(V(net)), "Profondeur"]
+net_graph <- ggnetwork(net)
+ggplot(net_graph, aes(x = x, y = y, xend = xend, yend = yend), layout = "fruchtermanreingold") +
+  geom_edges(color = "darkgray") +
+  geom_nodes(aes(color = date, shape = Profondeur),  size = 3 ) +
+  theme(axis.text = element_blank(), axis.title = element_blank(),
+        legend.key.height = unit(0.5,"line")) +
+  guides(col = guide_legend(override.aes = list(size = .5)))
+```
